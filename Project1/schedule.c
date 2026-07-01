@@ -4,10 +4,16 @@ void alarm_handler(int sig) {(void)sig;}
 
 int main(int argc, char* argv[])
 {
+	// changes path so that we can use system commands and user programs(two)
+	char *old_path = getenv("PATH"); // pointer to the current path
+	char *new_path = malloc(strlen(old_path)+3); 
+	snprintf(new_path, strlen(old_path) + 3, ".:%s", old_path); // merges(:) current(.) with the old path(%s)
+	setenv("PATH", new_path, 1); // changes path
+	free(new_path);
+	
 	if (argc < 3) {exit(1);}
 
-	char *endptr;
-	long quantum = strtol(argv[1], &endptr, 10); // Base 10 (decimal) conversion
+	long quantum = strtol(argv[1], NULL, 10); // Base 10 (decimal) conversion
 
 	int num_proc = 1;
 	for (int i = 2; i < argc; i++)
@@ -48,13 +54,14 @@ int main(int argc, char* argv[])
 	pid_t pids[MAX_PROCESSES];
 	int alive[MAX_PROCESSES];
 
-	for(int p = 0; p < num_proc; p++) // creates children then pauses
+	for (int p = 0; p < num_proc; p++) // creates children then pauses
 	{
 		pid_t pid = fork();
 		if (pid == 0)
 		{
 			raise(SIGSTOP); // pause
 			execvp(arg_list[p][0], arg_list[p]);
+			perror("execvp");
 			exit(1);
 		}
 		pids[p] = pid;
@@ -65,7 +72,7 @@ int main(int argc, char* argv[])
 	}
 
 
-	struct sigaction sa = {0};
+	struct sigaction sa;
 	sa.sa_handler = alarm_handler;
 	sa.sa_flags = 0;
 	sigemptyset(&sa.sa_mask);
@@ -83,7 +90,7 @@ int main(int argc, char* argv[])
 		kill(pid, SIGCONT); // continues the child
 
 		// timer
-		struct itimerval timer = {0};
+		struct itimerval timer;
 		timer.it_value.tv_sec = quantum / 1000;
 		timer.it_value.tv_usec = (quantum % 1000) * 1000;
 		setitimer(ITIMER_REAL, &timer, NULL); // timer starts here
@@ -91,7 +98,7 @@ int main(int argc, char* argv[])
 		int status;
 		pid_t result = waitpid(pid, &status, WUNTRACED);
 
-		struct itimerval cancel = {0};
+		struct itimerval cancel;
 		setitimer(ITIMER_REAL, &cancel, NULL);
 
 		if (result == -1) // if timer ran out
